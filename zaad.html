@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZaadPay — Secure Mobile Money Payment</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+  :root {
+    --zaad-green: #1D9E75;
+    --zaad-green-light: #E1F5EE;
+    --zaad-green-dark: #0F6E56;
+    --zaad-green-mid: #5DCAA5;
+  }
+  * { box-sizing: border-box; }
+
+  /* Dark mode */
+  .dark body { background: #0f1117; color: #e2e8f0; }
+  .dark .card-box { background: #1a1f2e; border-color: #2d3748; }
+  .dark input, .dark select { background: #252b3b; border-color: #3d4a5c; color: #e2e8f0; }
+  .dark input::placeholder { color: #64748b; }
+  .dark .method-btn { background: #252b3b; border-color: #3d4a5c; color: #94a3b8; }
+  .dark .method-btn.active { background: #0f3d2e; border-color: var(--zaad-green); color: var(--zaad-green-mid); }
+  .dark .sum-row { border-color: #2d3748; }
+  .dark .total-box { background: #0f3d2e; }
+  .dark .receipt-box { background: #1a1f2e; border-color: #2d3748; }
+  .dark .txid-box { background: #252b3b; color: #94a3b8; }
+  .dark .tx-item { background: #1a1f2e; border-color: #2d3748; }
+  .dark .qr-hint { background: #252b3b; }
+  .dark .dl-btn { background: #252b3b; }
+
+  /* Animations */
+  @keyframes fadeIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes slideDown { from { opacity:0; transform:translateY(-16px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes pulse-ring { 0%,100%{transform:scale(1);opacity:1;} 50%{transform:scale(1.08);opacity:0.8;} }
+
+  .fade-in { animation: fadeIn 0.4s ease both; }
+  .slide-down { animation: slideDown 0.35s ease both; }
+  .spinner { width:20px; height:20px; border:2.5px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin 0.7s linear infinite; }
+  .pulse { animation: pulse-ring 1.8s ease infinite; }
+
+  /* Inputs */
+  input, select {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #1e293b;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+  }
+  input:focus, select:focus {
+    border-color: var(--zaad-green);
+    box-shadow: 0 0 0 3px rgba(29,158,117,0.15);
+  }
+  input.err { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.1); }
+
+  /* Toast */
+  #toast {
+    position: fixed; top: 1rem; right: 1rem; left: 1rem;
+    max-width: 380px; margin: 0 auto;
+    padding: 13px 18px; border-radius: 12px;
+    font-size: 14px; font-weight: 500;
+    display: flex; align-items: center; gap: 9px;
+    z-index: 9999;
+    transform: translateY(-80px); opacity: 0;
+    transition: all 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    pointer-events: none;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { background:#dcfce7; color:#166534; border:1px solid #86efac; }
+  #toast.error { background:#fee2e2; color:#7f1d1d; border:1px solid #fca5a5; }
+
+  /* Pay button */
+  .pay-btn {
+    width:100%; padding:15px;
+    background: var(--zaad-green);
+    color:#fff; border:none; border-radius:12px;
+    font-size:16px; font-weight:600;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; gap:9px;
+    transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+    box-shadow: 0 4px 14px rgba(29,158,117,0.35);
+    font-family: inherit;
+  }
+  .pay-btn:hover:not(:disabled) { background: var(--zaad-green-dark); box-shadow: 0 6px 20px rgba(29,158,117,0.45); transform: translateY(-1px); }
+  .pay-btn:active:not(:disabled) { transform: scale(0.98) translateY(0); }
+  .pay-btn:disabled { opacity:0.65; cursor:not-allowed; box-shadow:none; }
+
+  /* Method buttons */
+  .method-btn {
+    padding:11px 8px; border:1px solid #cbd5e1;
+    border-radius:10px; background:#f8fafc;
+    cursor:pointer; text-align:center;
+    transition:all 0.18s; display:flex; align-items:center;
+    justify-content:center; gap:7px; font-size:14px;
+    color:#64748b; font-family:inherit; font-weight:500;
+  }
+  .method-btn.active { border-color: var(--zaad-green); background: var(--zaad-green-light); color: var(--zaad-green-dark); }
+  .method-btn:hover:not(.active) { border-color:#94a3b8; background:#f1f5f9; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width:5px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:10px; }
+</style>
+</head>
+<body class="min-h-screen bg-slate-50 font-sans transition-colors duration-300" id="body">
+
+<!-- Dark Mode Toggle -->
+<button onclick="toggleDark()" id="dark-toggle"
+  class="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm text-slate-600 shadow-sm hover:shadow-md transition-all duration-200 font-medium"
+  style="font-family:inherit;">
+  <i class="ti ti-moon" id="dark-icon" style="font-size:16px;"></i>
+  <span id="dark-label">Dark mode</span>
+</button>
+
+<!-- App -->
+<div class="max-w-4xl mx-auto px-4 py-10 pb-20">
+
+  <!-- Header -->
+  <div class="text-center mb-8 fade-in">
+    <div class="inline-flex items-center gap-3 mb-3">
+      <div class="w-11 h-11 rounded-2xl flex items-center justify-center shadow-md" style="background:var(--zaad-green);">
+        <i class="ti ti-brand-cashapp text-white" style="font-size:22px;"></i>
+      </div>
+      <h1 class="text-3xl font-bold text-slate-800" id="logo-text">Zaad<span style="color:var(--zaad-green);">Pay</span></h1>
+    </div>
+    <p class="text-slate-500 text-sm flex items-center justify-center gap-1.5">
+      <i class="ti ti-shield-check" style="color:var(--zaad-green);font-size:15px;"></i>
+      Secure mobile money payment — Somalia
+    </p>
+  </div>
+
+  <!-- Main Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    <!-- Left: Form -->
+    <div class="card-box bg-white rounded-2xl border border-slate-200 p-6 shadow-sm fade-in" style="animation-delay:0.05s">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-5 flex items-center gap-1.5">
+        <i class="ti ti-forms" style="font-size:15px;"></i> Payment details
+      </p>
+
+      <!-- Amount -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-600 mb-1.5">Amount (USD)</label>
+        <div class="relative">
+          <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-semibold pointer-events-none">$</span>
+          <input type="number" id="amount" placeholder="0.00" min="0" step="0.01" inputmode="decimal"
+            style="padding-left:28px;" oninput="calcFee()" class="transition-all duration-200">
+        </div>
+        <p class="text-xs text-red-500 mt-1 hidden" id="err-amount">Please enter a valid amount greater than 0</p>
+      </div>
+
+      <!-- Phone -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-600 mb-1.5">
+          <i class="ti ti-device-mobile" style="font-size:14px;vertical-align:-2px;margin-right:3px;"></i>Phone number
+        </label>
+        <input type="tel" id="phone" placeholder="06x xxx xxxx" inputmode="tel" maxlength="13" class="transition-all duration-200">
+        <p class="text-xs text-red-500 mt-1 hidden" id="err-phone">Enter a valid Somali number (06x or 07x, 10 digits)</p>
+      </div>
+
+      <!-- Recipient -->
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-slate-600 mb-1.5">
+          <i class="ti ti-user" style="font-size:14px;vertical-align:-2px;margin-right:3px;"></i>Recipient name
+          <span class="font-normal text-slate-400">(optional)</span>
+        </label>
+        <input type="text" id="recipient" placeholder="Full name" class="transition-all duration-200">
+      </div>
+
+      <!-- Note -->
+      <div class="mb-5">
+        <label class="block text-sm font-medium text-slate-600 mb-1.5">
+          <i class="ti ti-notes" style="font-size:14px;vertical-align:-2px;margin-right:3px;"></i>Reference / note
+        </label>
+        <input type="text" id="note" placeholder="e.g. Rent, groceries, school fees..." class="transition-all duration-200">
+      </div>
+
+      <!-- Payment Method -->
+      <div class="mb-2">
+        <label class="block text-sm font-medium text-slate-600 mb-2">Payment method</label>
+        <div class="grid grid-cols-2 gap-2.5">
+          <button class="method-btn active" onclick="setMethod('zaad',this)" id="m-zaad">
+            <i class="ti ti-device-mobile" style="font-size:17px;"></i> Zaad
+          </button>
+          <button class="method-btn" onclick="setMethod('edahab',this)" id="m-edahab">
+            <i class="ti ti-credit-card" style="font-size:17px;"></i> eDahab
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Summary + QR -->
+    <div class="flex flex-col gap-5">
+
+      <!-- Summary Card -->
+      <div class="card-box bg-white rounded-2xl border border-slate-200 p-6 shadow-sm fade-in" style="animation-delay:0.1s">
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
+          <i class="ti ti-receipt" style="font-size:15px;"></i> Payment summary
+        </p>
+
+        <div class="sum-row flex justify-between items-center py-2.5 border-b border-slate-100 text-sm">
+          <span class="text-slate-500">Amount</span>
+          <span class="font-semibold text-slate-800" id="sum-amount">$0.00</span>
+        </div>
+        <div class="sum-row flex justify-between items-center py-2.5 border-b border-slate-100 text-sm">
+          <span class="text-slate-500">Fee <span class="text-xs text-slate-400">(1%, min $0.50)</span></span>
+          <span class="font-semibold text-slate-800" id="sum-fee">$0.00</span>
+        </div>
+        <div class="sum-row flex justify-between items-center py-2.5 border-b border-slate-100 text-sm">
+          <span class="text-slate-500">Method</span>
+          <span class="font-semibold text-slate-800" id="sum-method">Zaad</span>
+        </div>
+
+        <div class="total-box flex justify-between items-center mt-4 mb-4 p-4 rounded-xl" style="background:var(--zaad-green-light);">
+          <span class="font-semibold text-sm" style="color:var(--zaad-green-dark);">Total to pay</span>
+          <span class="text-2xl font-bold" style="color:var(--zaad-green);" id="sum-total">$0.00</span>
+        </div>
+
+        <button class="pay-btn" id="pay-btn" onclick="initiatePayment()">
+          <i class="ti ti-brand-cashapp" style="font-size:19px;"></i>
+          <span id="btn-text">Pay now with Zaad</span>
+        </button>
+      </div>
+
+      <!-- QR Card -->
+      <div class="card-box bg-white rounded-2xl border border-slate-200 p-5 shadow-sm fade-in" style="animation-delay:0.15s">
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+          <i class="ti ti-qrcode" style="font-size:15px;"></i> QR payment
+        </p>
+        <div class="qr-hint text-center py-4 rounded-xl bg-slate-50" id="qr-hint">
+          <i class="ti ti-qrcode text-slate-300" style="font-size:36px;"></i>
+          <p class="text-xs text-slate-400 mt-1">Enter amount to generate QR</p>
+        </div>
+        <canvas id="qr-canvas" width="160" height="160"
+          style="display:none;margin:0 auto;border-radius:10px;border:1px solid #e2e8f0;"
+          class="block"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Receipt -->
+  <div class="receipt-box bg-white rounded-2xl border border-slate-200 p-6 shadow-sm mt-6 hidden" id="receipt">
+    <div class="text-center pb-5 border-b border-slate-100 mb-5">
+      <div class="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 pulse"
+        style="background:var(--zaad-green-light);">
+        <i class="ti ti-check" style="font-size:28px;color:var(--zaad-green);"></i>
+      </div>
+      <h2 class="text-xl font-bold text-slate-800">Payment successful!</h2>
+      <p class="text-sm text-slate-500 mt-1" id="rec-time"></p>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm mb-4">
+      <div class="flex justify-between py-1.5 border-b border-slate-100">
+        <span class="text-slate-500">Recipient</span><span class="font-semibold text-slate-800" id="rec-name">—</span>
+      </div>
+      <div class="flex justify-between py-1.5 border-b border-slate-100">
+        <span class="text-slate-500">Phone</span><span class="font-semibold text-slate-800" id="rec-phone">—</span>
+      </div>
+      <div class="flex justify-between py-1.5 border-b border-slate-100">
+        <span class="text-slate-500">Amount sent</span><span class="font-semibold text-slate-800" id="rec-amount">—</span>
+      </div>
+      <div class="flex justify-between py-1.5 border-b border-slate-100">
+        <span class="text-slate-500">Fee</span><span class="font-semibold text-slate-800" id="rec-fee">—</span>
+      </div>
+      <div class="flex justify-between py-1.5 border-b border-slate-100">
+        <span class="text-slate-500">Total charged</span>
+        <span class="font-bold" style="color:var(--zaad-green);" id="rec-total">—</span>
+      </div>
+      <div class="flex justify-between py-1.5 border-b border-slate-100">
+        <span class="text-slate-500">Method</span><span class="font-semibold text-slate-800" id="rec-method">—</span>
+      </div>
+      <div class="flex justify-between py-1.5 border-b border-slate-100 sm:col-span-2">
+        <span class="text-slate-500">Note</span><span class="font-semibold text-slate-800" id="rec-note">—</span>
+      </div>
+    </div>
+
+    <div class="txid-box text-center text-xs font-mono bg-slate-50 text-slate-500 rounded-xl py-3 px-4 mb-4" id="rec-txid"></div>
+
+    <button onclick="downloadReceipt()" class="dl-btn w-full flex items-center justify-center gap-2 py-3 rounded-xl
+      border border-slate-200 text-sm font-semibold text-slate-700 bg-slate-50
+      hover:bg-slate-100 transition-all duration-200" style="font-family:inherit;">
+      <i class="ti ti-download" style="font-size:17px;color:var(--zaad-green);"></i> Download receipt
+    </button>
+  </div>
+
+  <!-- Recent Transactions -->
+  <div id="recent-section" class="mt-8 hidden fade-in">
+    <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+      <i class="ti ti-clock-history" style="font-size:15px;"></i> Recent transactions
+    </p>
+    <div class="flex flex-col gap-2.5" id="recent-list"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" role="alert" aria-live="polite"></div>
+
+<script>
+  let currentMethod = 'zaad';
+  let isDark = false;
+  let transactions = [];
+
+  try { transactions = JSON.parse(localStorage.getItem('zaad_txns') || '[]'); } catch(e) {}
+
+  function toggleDark() {
+    isDark = !isDark;
+    document.documentElement.classList.toggle('dark', isDark);
+    document.getElementById('body').classList.toggle('bg-slate-900', isDark);
+    document.getElementById('body').classList.toggle('bg-slate-50', !isDark);
+    document.getElementById('dark-icon').className = isDark ? 'ti ti-sun' : 'ti ti-moon';
+    document.getElementById('dark-label').textContent = isDark ? 'Light mode' : 'Dark mode';
+    document.getElementById('dark-toggle').style.background = isDark ? '#1e293b' : '';
+    document.getElementById('dark-toggle').style.borderColor = isDark ? '#334155' : '';
+    document.getElementById('dark-toggle').style.color = isDark ? '#94a3b8' : '';
+    document.getElementById('logo-text').style.color = isDark ? '#e2e8f0' : '#1e293b';
+  }
+
+  function setMethod(m, el) {
+    currentMethod = m;
+    document.querySelectorAll('.method-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    const label = m === 'zaad' ? 'Zaad' : 'eDahab';
+    document.getElementById('sum-method').textContent = label;
+    document.getElementById('btn-text').textContent = 'Pay now with ' + label;
+  }
+
+  function calcFee() {
+    const raw = parseFloat(document.getElementById('amount').value) || 0;
+    const fee = raw > 0 ? Math.round(Math.max(raw * 0.01, 0.50) * 100) / 100 : 0;
+    const total = Math.round((raw + fee) * 100) / 100;
+    document.getElementById('sum-amount').textContent = '$' + raw.toFixed(2);
+    document.getElementById('sum-fee').textContent = '$' + fee.toFixed(2);
+    document.getElementById('sum-total').textContent = '$' + total.toFixed(2);
+    drawQR(raw);
+  }
+
+  function drawQR(amount) {
+    const canvas = document.getElementById('qr-canvas');
+    const hint = document.getElementById('qr-hint');
+    if (amount <= 0) { canvas.style.display = 'none'; hint.style.display = ''; return; }
+    hint.style.display = 'none'; canvas.style.display = 'block';
+    const ctx = canvas.getContext('2d');
+    const size = 160;
+    ctx.clearRect(0, 0, size, size);
+    ctx.fillStyle = isDark ? '#1a1f2e' : '#fff';
+    ctx.fillRect(0, 0, size, size);
+    const seed = Math.round(amount * 100) + (document.getElementById('phone').value || '').length + 7;
+    const cells = 15, cs = Math.floor((size - 20) / cells);
+    for (let r = 0; r < cells; r++) for (let c = 0; c < cells; c++) {
+      const v = ((seed * (r + 3) * (c + 7) + r * 19 + c * 37 + seed) % 3) === 0;
+      if (v) { ctx.fillStyle = '#1D9E75'; ctx.fillRect(10 + c * cs, 10 + r * cs, cs - 1, cs - 1); }
+    }
+    [[0, 0], [0, cells - 3], [cells - 3, 0]].forEach(([r, c]) => {
+      ctx.strokeStyle = '#1D9E75'; ctx.lineWidth = 2;
+      ctx.strokeRect(10 + c * cs, 10 + r * cs, cs * 3, cs * 3);
+      ctx.fillStyle = '#1D9E75'; ctx.fillRect(10 + c * cs + 2, 10 + r * cs + 2, cs * 3 - 4, cs * 3 - 4);
+      ctx.fillStyle = isDark ? '#1a1f2e' : '#fff'; ctx.fillRect(10 + c * cs + 5, 10 + r * cs + 5, cs * 3 - 10, cs * 3 - 10);
+      ctx.fillStyle = '#1D9E75'; ctx.fillRect(10 + c * cs + 7, 10 + r * cs + 7, cs * 3 - 14, cs * 3 - 14);
+    });
+  }
+
+  function validatePhone(p) {
+    return /^(0)(6[0-9]|7[0-9])[0-9]{7}$/.test(p.replace(/\s/g, ''));
+  }
+
+  function setErr(inputId, errId, show) {
+    document.getElementById(errId).classList.toggle('hidden', !show);
+    if (show) document.getElementById(inputId).classList.add('err');
+    else document.getElementById(inputId).classList.remove('err');
+  }
+
+  function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.className = 'show ' + type;
+    t.innerHTML = `<i class="ti ti-${type === 'success' ? 'circle-check' : 'alert-circle'}" style="font-size:18px;"></i> ${msg}`;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), 3800);
+  }
+
+  function genTxId() {
+    return 'ZD-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+  }
+
+  function initiatePayment() {
+    const amount = parseFloat(document.getElementById('amount').value);
+    const phone = document.getElementById('phone').value.trim();
+    let valid = true;
+    setErr('amount', 'err-amount', !amount || amount <= 0); if (!amount || amount <= 0) valid = false;
+    setErr('phone', 'err-phone', !validatePhone(phone)); if (!validatePhone(phone)) valid = false;
+    if (!valid) { showToast('Please fix the highlighted fields', 'error'); return; }
+
+    const btn = document.getElementById('pay-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner"></div><span>Processing payment...</span>';
+
+    setTimeout(() => {
+      const ok = Math.random() > 0.1;
+      btn.disabled = false;
+      const label = currentMethod === 'zaad' ? 'Zaad' : 'eDahab';
+      btn.innerHTML = `<i class="ti ti-brand-cashapp" style="font-size:19px;"></i><span id="btn-text">Pay now with ${label}</span>`;
+
+      if (ok) {
+        const fee = Math.round(Math.max(amount * 0.01, 0.5) * 100) / 100;
+        const total = Math.round((amount + fee) * 100) / 100;
+        const txid = genTxId();
+        const name = document.getElementById('recipient').value.trim() || 'Unknown';
+        const note = document.getElementById('note').value.trim() || '—';
+        const now = new Date();
+        const txn = { txid, name, phone, amount, fee, total, method: currentMethod, note, time: now.toISOString() };
+        transactions.unshift(txn);
+        if (transactions.length > 10) transactions = transactions.slice(0, 10);
+        try { localStorage.setItem('zaad_txns', JSON.stringify(transactions)); } catch(e) {}
+        showReceipt(txn);
+        renderRecent();
+        showToast('Payment of $' + total.toFixed(2) + ' sent successfully! 🎉', 'success');
+      } else {
+        showToast('Payment failed. Please check your details and retry.', 'error');
+      }
+    }, 2400);
+  }
+
+  function showReceipt(tx) {
+    const r = document.getElementById('receipt');
+    const t = new Date(tx.time);
+    document.getElementById('rec-time').textContent =
+      t.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) +
+      ' · ' + t.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+    document.getElementById('rec-name').textContent = tx.name;
+    document.getElementById('rec-phone').textContent = tx.phone;
+    document.getElementById('rec-amount').textContent = '$' + tx.amount.toFixed(2);
+    document.getElementById('rec-fee').textContent = '$' + tx.fee.toFixed(2);
+    document.getElementById('rec-total').textContent = '$' + tx.total.toFixed(2);
+    document.getElementById('rec-method').textContent = tx.method === 'zaad' ? 'Zaad' : 'eDahab';
+    document.getElementById('rec-note').textContent = tx.note;
+    document.getElementById('rec-txid').textContent = 'Transaction ID: ' + tx.txid;
+    r.classList.remove('hidden');
+    r.classList.add('slide-down');
+    setTimeout(() => r.scrollIntoView({ behavior:'smooth', block:'nearest' }), 100);
+  }
+
+  function downloadReceipt() {
+    const tx = transactions[0];
+    if (!tx) return;
+    const lines = [
+      '╔══════════════════════════════════════╗',
+      '║         ZAADPAY PAYMENT RECEIPT        ║',
+      '╚══════════════════════════════════════╝',
+      '',
+      'Transaction ID : ' + tx.txid,
+      'Date & Time    : ' + new Date(tx.time).toLocaleString(),
+      '',
+      '── Recipient ──────────────────────────',
+      'Name           : ' + tx.name,
+      'Phone          : ' + tx.phone,
+      '',
+      '── Amount Details ─────────────────────',
+      'Amount Sent    : $' + tx.amount.toFixed(2),
+      'Transaction Fee: $' + tx.fee.toFixed(2),
+      'Total Charged  : $' + tx.total.toFixed(2),
+      '',
+      '── Payment Info ───────────────────────',
+      'Method         : ' + (tx.method === 'zaad' ? 'Zaad Mobile Money' : 'eDahab'),
+      'Note           : ' + tx.note,
+      '',
+      '══════════════════════════════════════',
+      '  Thank you for using ZaadPay!',
+      '  Secure · Fast · Reliable',
+      '══════════════════════════════════════'
+    ];
+    const blob = new Blob([lines.join('\n')], { type:'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'zaadpay-receipt-' + tx.txid + '.txt';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('Receipt downloaded successfully', 'success');
+  }
+
+  function renderRecent() {
+    const section = document.getElementById('recent-section');
+    const list = document.getElementById('recent-list');
+    if (!transactions.length) { section.classList.add('hidden'); return; }
+    section.classList.remove('hidden');
+    list.innerHTML = transactions.slice(0, 5).map((tx, i) => {
+      const initials = (tx.name || 'U').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+      const t = new Date(tx.time);
+      const when = t.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' · ' + t.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+      return `<div class="tx-item flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3 fade-in" style="animation-delay:${i*0.06}s;">
+        <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold"
+          style="background:var(--zaad-green-light);color:var(--zaad-green-dark);">${initials}</div>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-slate-800 text-sm truncate">${tx.name}</p>
+          <p class="text-xs text-slate-400 truncate">${tx.phone} · ${when}</p>
+        </div>
+        <div class="text-right flex-shrink-0">
+          <p class="font-bold text-sm" style="color:var(--zaad-green);">$${tx.total.toFixed(2)}</p>
+          <p class="text-xs text-slate-400">${tx.method === 'zaad' ? 'Zaad' : 'eDahab'}</p>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Init
+  calcFee();
+  renderRecent();
+</script>
+</body>
+</html>
